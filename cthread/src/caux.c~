@@ -1,0 +1,98 @@
+#include <stdlib.h>
+
+
+int dispatcher() {
+
+    TCB_t *READY_thread = retrieveReadyThread();
+    TCB_t *EXEC_thread = g_scheduler.exec_thread;
+
+    if (READY_thread == NULL)
+        return -1;
+
+    addToExec(READY_thread);
+    swapcontext(&EXEC_thread->context, &READY_thread->context);
+
+    return 0;
+}
+
+void createSchedulerContext(){
+    getcontext(&scheduler_context);
+    char stack_dispatcher[SIGSTKSZ];
+    scheduler_context.uc_stack.ss_sp = stack_dispatcher;
+    scheduler_context.uc_stack.ss_size = sizeof(stack_dispatcher);
+    makecontext( &scheduler_context, (void (*)(void))dispatcher, 0);
+}
+
+void initQueues(){
+    ready_queue = malloc(sizeof(FILA2));
+    blocked_queue = malloc(sizeof(FILA2));
+    finished_queue = malloc(sizeof(FILA2));
+    ready_suspended_queue = malloc(sizeof(FILA2));
+    blocked_suspended_queue = malloc(sizeof(FILA2));
+
+    CreateFila2(ready_queue);
+    CreateFila2(blocked_queue);
+    CreateFila2(finished_queue);
+    CreateFila2(ready_suspended_queue);
+    CreateFila2(blocked_suspended_queue);
+}
+
+TCB_t* createThread(){
+
+    TCB_t * new_thread = malloc(sizeof(TCB_t));
+
+    if(new_thread != NULL){
+        new_thread->tid = next_tid;
+        new_thread->state = PROCST_CRIACAO;
+        new_thread->prio = 0;
+        next_tid++;
+
+        new_thread->context.uc_stack.ss_sp = malloc(SIGSTKSZ);
+        new_thread->context.uc_stack.ss_size = SIGSTKSZ;
+        return new_thread;
+    }
+    return NULL;
+}
+
+void initMainThread(){
+    //main context stuff
+    ucontext_t MainContext;
+    char main_stack[SIGSTKSZ];  //STACK FOR MAIN CONTEXT
+    TCB_t *main_thread = malloc(sizeof(TCB_t));
+
+    if(main_thread != NULL){
+        //init main TCB
+        main_thread->tid = 0;
+        main_thread->state = PROCST_EXEC;
+        main_thread->prio = 0;
+
+        //save main context
+        getcontext(&main_thread->context);
+
+        //MAIN CONTEXT STUFF
+        main_thread->context.uc_link = NULL;
+        main_thread->context.uc_stack.ss_sp   = main_stack;
+        main_thread->context.uc_stack.ss_size = sizeof(main_stack);
+
+        makecontext(&main_thread->context, (void (*)(void))NULL, 0);
+    }
+}
+
+void initialize(){
+    //initialize all queues
+    initQueues();
+
+    //set the current thread to NULL
+    current_thread = NULL;
+
+    //create a scheduler context
+    createSchedulerContext();
+
+    //init main thread
+    initMainThread();
+
+    //set current thread to main
+    current_thread = main_thread;
+
+    has_init = 1;
+}
