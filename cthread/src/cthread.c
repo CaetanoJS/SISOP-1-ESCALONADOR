@@ -23,27 +23,20 @@ PFILA2 blocked_suspended_queue;
 
 //INIT ALL QUEUES AND STRUCTURES FOR QUEUES
 void initQueues(){
+    printf("partiu mallocar as fila\n");
     ready_queue = malloc(sizeof(FILA2));
     blocked_queue = malloc(sizeof(FILA2));
     finished_queue = malloc(sizeof(FILA2));
     ready_suspended_queue = malloc(sizeof(FILA2));
     blocked_suspended_queue = malloc(sizeof(FILA2));
-
-    if (CreateFila2(ready_queue) == RETURN_OK){
-        printf("criou ready ok \n");
+    printf("as fila eh nois\n");
+    if(CreateFila2(ready_queue) == RETURN_OK){
+      printf("create fila APTOS ok, sou vou testar essa, pau no cu das outras\n");
     }
-    if (CreateFila2(blocked_queue) == RETURN_OK){
-        printf("criou BLOCKED ok \n");
-    }
-    if (CreateFila2(finished_queue) == RETURN_OK){
-        printf("criou finished_queue \n");
-    }
-    if (CreateFila2(ready_suspended_queue) == RETURN_OK){
-        printf("ready suspend\n");
-    }
-    if (CreateFila2(blocked_suspended_queue) == RETURN_OK){
-        printf("blocked suspend\n");
-    }
+    CreateFila2(blocked_queue);
+    CreateFila2(finished_queue);
+    CreateFila2(ready_suspended_queue);
+    CreateFila2(blocked_suspended_queue);
 }
 
 
@@ -76,6 +69,7 @@ int initMainThread(){
 
     if(main_thread != NULL){
         //init main TCB
+        printf("main_thread mallocada corretamente\n");
         main_thread->tid = 0;
         main_thread->state = PROCST_EXEC;
         main_thread->prio = 0;
@@ -87,11 +81,12 @@ int initMainThread(){
 
 //INITIALIZE ALL STRUCTURES
 int initialize(){
-
+    printf("eita, entrou em initialize, agora vamo pro initQueues\n");
     //initialize all queues
     initQueues();
 
     if (initMainThread() == RETURN_OK){
+        printf("initMainThread OK\n");
         current_thread = main_thread;
         has_init = 1;
         return RETURN_OK;
@@ -116,25 +111,95 @@ int ccreate (void* (*start)(void*), void *arg, int prio){
     TCB_t *new_thread;
 
     //if the main and the queues are note created yet, then create them
-    if(!has_init){
-        initialize();
+    if(has_init == 0){
+        printf("has_init eh zero, vai inicializar os baguio\n");
+        if(initialize() == RETURN_OK){
+          printf("initialize deu toda certo\n");
+        }
     }
 
     if (getcontext(&scheduler_context) == RETURN_OK){
+        printf("salvou scheduler_context (eh um pra cada ccreate que tem na main, ta ligado)\n");
         //create new thread
         new_thread = createThread();
         makecontext(&new_thread->context, (void (*)(void))start, 1, arg);
         new_thread->state = PROCST_APTO;
-        AppendFila2(ready_queue, new_thread);
+        //AppendFila2(ready_queue, new_thread);
         return new_thread->tid;
     }
 
     return RETURN_ERROR;
 }
+
+
 // ########## END OF CCREATE AND AUXILIARIES ################
 
+// ################### CYIELD AND AUXILIARIES ###################
+//##dispatcher: when called, set the first threand in ready queue to executing
+int dispatcher(){
+    printf("dispatcher atuando..\n");
 
-// ###### CIDENTIFY ######
+    //set the queue iterator to 1st position
+    if (FirstFila2(ready_queue) == RETURN_OK){
+
+        // next_thread é a próxima thread a ser executada (1st de APTO)
+        PNODE2 next_thread;
+        next_thread = (PNODE2)GetAtIteratorFila2(ready_queue);
+        TCB_t *next = (TCB_t *)next_thread->node;
+
+         //if not null, sets the contexts to the first thread
+         if (current_thread != NULL){
+             printf("nao eh null, entao tira da fila e da set..\n");
+             //remove 1st element of ready queue
+             if(DeleteAtIteratorFila2(ready_queue) == RETURN_OK){
+                 printf("removeu o primeiro da lista de aptos\n");
+                 swapcontext(&(current_thread->context),&(next->context));
+                 return RETURN_OK;
+             }else{
+                 printf("nao removeu o primeiro da lista de aptos, erro..\n");
+                 return RETURN_ERROR;
+             }
+         }else{
+           if(FirstFila2(ready_queue) == 0){
+             //se nao tem gente retornando de exec, e tem gente em apto,
+             //manda o que tava em apto pro exec
+             setcontext(&(next->context));
+             printf("setou o next pq tinha nego no aptos\n");
+             return RETURN_OK;
+           }
+            printf("nada deu certo fudeu\n");
+            return RETURN_ERROR;
+         }
+    }
+    printf("NAO ACHOU NADA NO FIRSTFILA2 \n");
+    return RETURN_ERROR;
+}
+
+int cyield(void){
+  printf("executando cyield\n");
+  //set the state to APTO
+  current_thread->state = PROCST_APTO;
+
+  //save the thread context
+  if(getcontext(&current_thread->context) == RETURN_OK){
+      printf("salvou contexto cyield\n");
+      int j = 1;
+      //put the current thread in the ready queue
+      if(j==1){
+          printf("adicionou na fila de aptos\n");
+          //call dispatcher
+          dispatcher();
+          return RETURN_OK;
+      }
+      printf("errou colocando na fila de apto\n");
+      return RETURN_ERROR;
+  }
+  printf("errou salvando contexto \n");
+  return RETURN_ERROR;
+  }
+
+// ########## CYIELD AND AUXILIARIES ################
+
 int cidentify (char *name, int size){
     char id_grupo[IDENTIFY] = "Leonardo Eich 242314\nFelipe Fischer 242264\nCaetano Jaeger 242309\n";
 
@@ -144,28 +209,4 @@ int cidentify (char *name, int size){
 	}
 
 	return RETURN_ERROR;
-}
-//## end of CIDENTIFY
-
-int cyield(void){
-    printf("executando cyield\n");
-    //set the state to APTO
-    current_thread->state = PROCST_APTO;
-
-    //save the thread context
-    if(getcontext(&current_thread->context) == RETURN_OK){
-        printf("salvou contexto cyield\n");
-
-        //put the current thread in the ready queue
-        if(AppendFila2(ready_queue, current_thread) == RETURN_OK){
-            printf("adicionou na fila de aptos\n");
-            //call dispatcher
-            dispatcher();
-            return RETURN_OK;
-        }
-        printf("errou colocando na fila de apto\n");
-        return RETURN_ERROR;
-    }
-    printf("errou salvando contexto \n");
-    return RETURN_ERROR;
 }
