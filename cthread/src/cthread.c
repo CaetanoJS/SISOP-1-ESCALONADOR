@@ -29,11 +29,21 @@ void initQueues(){
     ready_suspended_queue = malloc(sizeof(FILA2));
     blocked_suspended_queue = malloc(sizeof(FILA2));
 
-    CreateFila2(ready_queue);
-    CreateFila2(blocked_queue);
-    CreateFila2(finished_queue);
-    CreateFila2(ready_suspended_queue);
-    CreateFila2(blocked_suspended_queue);
+    if (CreateFila2(ready_queue) == RETURN_OK){
+        printf("criou ready ok \n");
+    }
+    if (CreateFila2(blocked_queue) == RETURN_OK){
+        printf("criou BLOCKED ok \n");
+    }
+    if (CreateFila2(finished_queue) == RETURN_OK){
+        printf("criou finished_queue \n");
+    }
+    if (CreateFila2(ready_suspended_queue) == RETURN_OK){
+        printf("ready suspend\n");
+    }
+    if (CreateFila2(blocked_suspended_queue) == RETURN_OK){
+        printf("blocked suspend\n");
+    }
 }
 
 
@@ -121,10 +131,10 @@ int ccreate (void* (*start)(void*), void *arg, int prio){
 
     return RETURN_ERROR;
 }
-
-
 // ########## END OF CCREATE AND AUXILIARIES ################
 
+
+// ###### CIDENTIFY ######
 int cidentify (char *name, int size){
     char id_grupo[IDENTIFY] = "Leonardo Eich 242314\nFelipe Fischer 242264\nCaetano Jaeger 242309\n";
 
@@ -135,7 +145,27 @@ int cidentify (char *name, int size){
 
 	return RETURN_ERROR;
 }
+//## end of CIDENTIFY
 
 int cyield(void){
-    return 0;
+    printf("executando cyield\n");
+    //set the state to APTO
+    current_thread->state = PROCST_APTO;
+
+    //save the thread context
+    if(getcontext(&current_thread->context) == RETURN_OK){
+        printf("salvou contexto cyield\n");
+
+        //put the current thread in the ready queue
+        if(AppendFila2(ready_queue, current_thread) == RETURN_OK){
+            printf("adicionou na fila de aptos\n");
+            //call dispatcher
+            dispatcher();
+            return RETURN_OK;
+        }
+        printf("errou colocando na fila de apto\n");
+        return RETURN_ERROR;
+    }
+    printf("errou salvando contexto \n");
+    return RETURN_ERROR;
 }
